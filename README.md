@@ -20,6 +20,8 @@ The data is available at:
 
 ### Calculate Seconds between two Timestamps ###
 
+First we define a Function ``DateDiffSeconds`` to calculate the seconds between two timestamps: 
+
 ```
 CREATE OR REPLACE FUNCTION sample.DateDiffSeconds(start_t TIMESTAMP, end_t TIMESTAMP) 
 RETURNS INT AS $$
@@ -43,6 +45,8 @@ DECLARE
 
 ### Find Missing Values ###
 
+Now we identify the timestamps where the difference between two measurements is greater than 1 hour:
+
 ```
 SELECT  *
 FROM (SELECT 
@@ -53,6 +57,12 @@ FROM (SELECT
 WHERE sample.datediffseconds (PreviousMeasurementDateTime, MeasurementDateTime) > 3600;
 ```
 
+Execution Time:
+
+```
+Total query runtime: 2 min.
+17043 rows retrieved.
+```
 
 [PostgreSQL]: https://www.postgresql.org
 [Quality Controlled Local Climatological Data (QCLCD)]: https://www.ncdc.noaa.gov/data-access/land-based-station-data/land-based-datasets/quality-controlled-local-climatological-data-qclcd
