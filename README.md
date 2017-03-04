@@ -88,8 +88,8 @@ DECLARE
             
      RETURN diff;
    END;
-   $$ LANGUAGE plpgsql IMMUTABLE
-   COST 1000;
+   $$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
+   COST 1000;
 ```
 
 ### Find Missing Values (without Index) ###
