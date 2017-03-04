@@ -92,7 +92,7 @@ DECLARE
    COST 1000;
 ```
 
-### Find Missing Values ###
+### Find Missing Values (without Index) ###
 
 Now we identify the timestamps where the difference between two measurements is greater than 1 hour:
 
@@ -113,13 +113,18 @@ Total query runtime: 2 min.
 17043 rows retrieved.
 ```
 
-#### Using an Index ####
+### Find Missing Values (with Index) ###
+
+First create an index:
 
 ```sql
 CREATE INDEX idx_weather_data_datetime ON sample.weather_data (wban, datetime) 
 ``` 
 
+Then execute the query to find missing values again:
+
 Execution Time:
+
 ```
 Total query runtime: 40 secs.
 17043 rows retrieved.
