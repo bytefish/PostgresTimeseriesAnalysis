@@ -16,13 +16,61 @@ The data is available at:
 
 * [http://www.ncdc.noaa.gov/orders/qclcd/](http://www.ncdc.noaa.gov/orders/qclcd/)
 
-## Query ##
+## Enable PostgreSQL Statistics ##
 
-### Calculate Seconds between two Timestamps ###
+First of all we need to find out, which ``postgresql.config`` is currently loaded:
 
-First we define a Function ``DateDiffSeconds`` to calculate the seconds between two timestamps: 
+```sql
+-- Show the currently used config file:
+SHOW config_file;
+```
+
+The ``pg_stat_statements`` module must be configured in the ``postgresq.conf``:
 
 ```
+shared_preload_libraries='pg_stat_statements'
+
+pg_stat_statements.max = 10000
+pg_stat_statements.track = all
+```
+
+Now we can load the ``pg_stat_statements`` and query the most recent queries:
+
+```sql
+-- Load the pg_stat_statements:
+create extension pg_stat_statements;
+
+-- Show recent Query statistics:  
+select * 
+from pg_stat_statements
+order by queryid desc;
+```
+
+## Enable Parallel Queries ##
+
+First of all we need to find out, which ``postgresql.config`` is currently loaded:
+
+```sql
+-- Show the currently used config file:
+SHOW config_file;
+```
+
+Then we need to set the parameters ``max_worker_processes``and ``max_parallel_workers_per_gather``:
+
+```
+max_worker_processes = 8		# (change requires restart)
+max_parallel_workers_per_gather = 4	# taken from max_worker_processes
+```
+
+## Queries ##
+
+### How to calculate the seconds between two Timestamps ###
+
+First we define a Function ``DateDiffSeconds`` to calculate the seconds between two timestamps. 
+
+This can be done using PostgreSQL ``DATE_PART`` function:
+
+```sql
 CREATE OR REPLACE FUNCTION sample.DateDiffSeconds(start_t TIMESTAMP, end_t TIMESTAMP) 
 RETURNS INT AS $$
 DECLARE
@@ -40,14 +88,15 @@ DECLARE
             
      RETURN diff;
    END;
-   $$ LANGUAGE plpgsql;
+   $$ LANGUAGE plpgsql IMMUTABLE
+   COST 1000;
 ```
 
 ### Find Missing Values ###
 
 Now we identify the timestamps where the difference between two measurements is greater than 1 hour:
 
-```
+```sql
 SELECT  *
 FROM (SELECT 
         weather_data.wban as WbanIdentifier, 
@@ -63,6 +112,22 @@ Execution Time:
 Total query runtime: 2 min.
 17043 rows retrieved.
 ```
+
+#### Using an Index ####
+
+```sql
+CREATE INDEX idx_weather_data_datetime ON sample.weather_data (wban, datetime) 
+``` 
+
+Execution Time:
+```
+Total query runtime: 40 secs.
+17043 rows retrieved.
+``` 
+
+## Additional Resources ##
+
+* http://blog.cleverelephant.ca/2016/03/parallel-postgis.html
 
 [PostgreSQL]: https://www.postgresql.org
 [Quality Controlled Local Climatological Data (QCLCD)]: https://www.ncdc.noaa.gov/data-access/land-based-station-data/land-based-datasets/quality-controlled-local-climatological-data-qclcd
