@@ -132,7 +132,15 @@ Total query runtime: 40 secs.
 
 ## Additional Resources ##
 
+* http://tapoueh.org/blog/2013/08/20-Window-Functions
+* https://www.compose.com/articles/metrics-maven-window-functions-in-postgresql/
+* https://wiki.postgresql.org/images/a/a2/PostgreSQL_Window_Functions.pdf
 * http://blog.cleverelephant.ca/2016/03/parallel-postgis.html
+
+### Resampling and Interpolation ###
+
+* https://content.pivotal.io/blog/time-series-analysis-part-3-resampling-and-interpolation
+
 
 [PostgreSQL]: https://www.postgresql.org
 [Quality Controlled Local Climatological Data (QCLCD)]: https://www.ncdc.noaa.gov/data-access/land-based-station-data/land-based-datasets/quality-controlled-local-climatological-data-qclcd
