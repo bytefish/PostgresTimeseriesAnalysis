@@ -130,6 +130,119 @@ Total query runtime: 40 secs.
 17043 rows retrieved.
 ``` 
 
+### Initial Work on Interpolation ###
+
+First we define a function to get the first and last value of a result set:
+
+```sql
+-- Create a function that always returns the first non-NULL item
+CREATE OR REPLACE FUNCTION sample.first_agg ( anyelement, anyelement )
+RETURNS anyelement LANGUAGE SQL IMMUTABLE STRICT AS $$
+        SELECT $1;
+$$;
+ 
+-- And then wrap an aggregate around it
+CREATE AGGREGATE sample.FIRST (
+        sfunc    = sample.first_agg,
+        basetype = anyelement,
+        stype    = anyelement
+);
+ 
+-- Create a function that always returns the last non-NULL item
+CREATE OR REPLACE FUNCTION sample.last_agg ( anyelement, anyelement )
+RETURNS anyelement LANGUAGE SQL IMMUTABLE STRICT AS $$
+        SELECT $2;
+$$;
+ 
+-- And then wrap an aggregate around it
+CREATE AGGREGATE sample.LAST (
+        sfunc    = sample.last_agg,
+        basetype = anyelement,
+        stype    = anyelement
+);
+``` 
+
+
+The following query builds a query, which interpolates the values in 5 Minute intervals.
+
+```sql
+with bounded as (
+    select 
+    	datetime, 
+    	'epoch'::timestamp + '5 Minute'::interval * (extract(epoch from datetime)::int4 / 300) as slice, 
+    	temperature,
+    	LAG(temperature) OVER(PARTITION BY wban ORDER BY datetime) AS prevval, 
+        LEAD(temperature) OVER(PARTITION BY wban ORDER BY datetime) AS nextval
+    from sample.weather_data
+    where wban = '53922'
+    order by datetime asc
+    limit 100
+), 
+dense as(
+	select slice
+	from generate_series('2015-03-01'::timestamp, '2015-03-02'::timestamp, '5 Minute'::Interval)  s(slice)
+),
+filled as(
+    select slice,
+       temperature,
+       coalesce(temperature,
+                sample.linear_interpolate(slice, 
+                                          sample.last(datetime) over (lookback),
+                                          sample.last(temperature) over (lookback),
+                                          sample.last(datetime) over (lookforward),
+                                          sample.last(temperature) over (lookforward))) interpolated
+    from bounded right join dense
+    using (slice)
+    window 
+        lookback as (order by slice, datetime),
+        lookforward as (order by slice desc, datetime desc)
+    order by slice, datetime
+)
+select 
+	slice, 
+    min(interpolated), 
+    max(interpolated),
+    avg(interpolated)
+from filled
+group by slice
+order by slice;
+```
+
+Next we define a function to do a Linear Interpolation between timesteps:
+
+```sql
+CREATE OR REPLACE FUNCTION sample.linear_interpolate(x_i timestamp, x_0 timestamp, y_0 double precision, x_1 timestamp, y_1 double precision)
+RETURNS DOUBLE PRECISION AS $$
+   BEGIN
+   	return sample.linear_interpolate(
+        sample.timestamp_to_seconds(x_i),
+        sample.timestamp_to_seconds(x_0),
+        y_0,
+        sample.timestamp_to_seconds(x_1),
+        y_1);
+   END;
+   $$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
+   COST 1000;
+
+
+CREATE OR REPLACE FUNCTION sample.linear_interpolate(x_i int, x_0 int, y_0 DOUBLE PRECISION, x_1 int, y_1 DOUBLE PRECISION) 
+RETURNS DOUBLE PRECISION AS $$
+DECLARE
+    x INT = 0; 
+    m DOUBLE PRECISION = 0;
+    n DOUBLE PRECISION = 0;
+   BEGIN
+    -- Function to solve is: y = mx + n, so first solve m:
+    m = (y_1 - y_0) / (x_1 - x_0);
+    n = y_0;
+    x = (x_i - x_0);
+    
+    RETURN (m * x + n);
+   END;
+   $$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
+   COST 1000;
+```
+
 ## Additional Resources ##
 
 * http://tapoueh.org/blog/2013/08/20-Window-Functions
