@@ -163,51 +163,6 @@ CREATE AGGREGATE sample.LAST (
 ``` 
 
 
-The following query builds a query, which interpolates the values in 5 Minute intervals.
-
-```sql
-with bounded as (
-    select 
-    	datetime, 
-    	'epoch'::timestamp + '5 Minute'::interval * (extract(epoch from datetime)::int4 / 300) as slice, 
-    	temperature,
-    	LAG(temperature) OVER(PARTITION BY wban ORDER BY datetime) AS prevval, 
-        LEAD(temperature) OVER(PARTITION BY wban ORDER BY datetime) AS nextval
-    from sample.weather_data
-    where wban = '53922'
-    order by datetime asc
-    limit 100
-), 
-dense as(
-	select slice
-	from generate_series('2015-03-01'::timestamp, '2015-03-02'::timestamp, '5 Minute'::Interval)  s(slice)
-),
-filled as(
-    select slice,
-       temperature,
-       coalesce(temperature,
-                sample.linear_interpolate(slice, 
-                                          sample.last(datetime) over (lookback),
-                                          sample.last(temperature) over (lookback),
-                                          sample.last(datetime) over (lookforward),
-                                          sample.last(temperature) over (lookforward))) interpolated
-    from bounded right join dense
-    using (slice)
-    window 
-        lookback as (order by slice, datetime),
-        lookforward as (order by slice desc, datetime desc)
-    order by slice, datetime
-)
-select 
-	slice, 
-    min(interpolated), 
-    max(interpolated),
-    avg(interpolated)
-from filled
-group by slice
-order by slice;
-```
-
 Next we define a function to do a Linear Interpolation between timesteps:
 
 ```sql
@@ -241,6 +196,96 @@ DECLARE
    END;
    $$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
    COST 1000;
+```
+
+The following query then builds a query, which interpolates the values in 5 Minute intervals for 1 Station.
+
+```sql
+explain analyze with bounded as (
+    select
+      wban,
+    	datetime,
+    	'epoch'::timestamp + '5 Minute'::interval * (extract(epoch from datetime)::int4 / 300) as slice,
+    	temperature
+    from sample.weather_data
+    where wban = '53922'
+    order by datetime asc
+),
+dense as(
+	select '53922'::VARCHAR(255) as wban, slice
+	from generate_series('2015-03-01'::timestamp, '2015-03-20'::timestamp, '5 Minute'::Interval)  s(slice)
+),
+filled as(
+    select
+       wban,
+       slice,
+       temperature,
+       coalesce(temperature,
+                sample.linear_interpolate(slice,
+                                          sample.last(datetime) over (lookback),
+                                          sample.last(temperature) over (lookback),
+                                          sample.last(datetime) over (lookforward),
+                                          sample.last(temperature) over (lookforward))) interpolated
+    from bounded right join dense
+    using (wban, slice)
+    window
+        lookback as (order by slice, datetime),
+        lookforward as (order by slice desc, datetime desc)
+    order by slice, datetime
+)
+select
+  wban,
+	slice,
+    min(interpolated),
+    max(interpolated),
+    avg(interpolated)
+from filled
+group by slice, wban
+order by slice, wban;
+```
+
+This leads to the following Query Plan:
+
+```
+Sort  (cost=93788.91..93789.41 rows=200 width=548) (actual time=1214.739..1215.225 rows=5473 loops=1)
+  Sort Key: filled.slice, filled.wban
+  Sort Method: quicksort  Memory: 620kB
+  CTE bounded
+    ->  Sort  (cost=90748.69..90754.65 rows=2383 width=26) (actual time=1082.909..1082.981 rows=1067 loops=1)
+          Sort Key: weather_data.datetime
+          Sort Method: quicksort  Memory: 132kB
+          ->  Seq Scan on weather_data  (cost=0.00..90615.02 rows=2383 width=26) (actual time=742.759..1082.495 rows=1067 loops=1)
+                Filter: ((wban)::text = '53922'::text)
+                Rows Removed by Filter: 4495195
+  CTE dense
+    ->  Function Scan on generate_series s  (cost=0.00..10.00 rows=1000 width=524) (actual time=1.579..3.347 rows=5473 loops=1)
+  CTE filled
+    ->  Sort  (cost=2979.12..2981.62 rows=1000 width=544) (actual time=1198.141..1198.764 rows=5515 loops=1)
+          Sort Key: dense.slice, bounded.datetime
+          Sort Method: quicksort  Memory: 623kB
+          ->  WindowAgg  (cost=399.29..2929.29 rows=1000 width=544) (actual time=1110.224..1194.257 rows=5515 loops=1)
+                ->  Sort  (cost=399.29..401.79 rows=1000 width=548) (actual time=1110.216..1110.967 rows=5515 loops=1)
+                      Sort Key: dense.slice DESC, bounded.datetime DESC
+                      Sort Method: quicksort  Memory: 623kB
+                      ->  WindowAgg  (cost=326.96..349.46 rows=1000 width=548) (actual time=1097.938..1106.938 rows=5515 loops=1)
+                            ->  Sort  (cost=326.96..329.46 rows=1000 width=536) (actual time=1097.930..1098.374 rows=5515 loops=1)
+                                  Sort Key: dense.slice, bounded.datetime
+                                  Sort Method: quicksort  Memory: 473kB
+                                  ->  Merge Left Join  (cost=251.16..277.13 rows=1000 width=536) (actual time=1093.907..1096.604 rows=5515 loops=1)
+                                        Merge Cond: (((dense.wban)::text = (bounded.wban)::text) AND (dense.slice = bounded.slice))
+                                        ->  Sort  (cost=69.83..72.33 rows=1000 width=524) (actual time=10.015..10.417 rows=5473 loops=1)
+                                              Sort Key: dense.wban, dense.slice
+                                              Sort Method: quicksort  Memory: 449kB
+                                              ->  CTE Scan on dense  (cost=0.00..20.00 rows=1000 width=524) (actual time=1.583..7.642 rows=5473 loops=1)
+                                        ->  Sort  (cost=181.33..187.29 rows=2383 width=536) (actual time=1083.882..1083.927 rows=700 loops=1)
+                                              Sort Key: bounded.wban, bounded.slice
+                                              Sort Method: quicksort  Memory: 132kB
+                                              ->  CTE Scan on bounded  (cost=0.00..47.66 rows=2383 width=536) (actual time=1082.919..1083.381 rows=1067 loops=1)
+  ->  HashAggregate  (cost=32.50..35.00 rows=200 width=548) (actual time=1208.114..1210.604 rows=5473 loops=1)
+        Group Key: filled.slice, filled.wban
+        ->  CTE Scan on filled  (cost=0.00..20.00 rows=1000 width=532) (actual time=1198.144..1201.491 rows=5515 loops=1)
+Planning time: 0.484 ms
+Execution time: 1216.413 ms
 ```
 
 ## Additional Resources ##
