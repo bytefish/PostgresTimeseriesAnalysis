@@ -5,3 +5,4 @@ elasticutils-*-sources.jar
 *.asc
 stderr.log
 stdout.log
+*.iml
