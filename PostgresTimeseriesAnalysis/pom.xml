@@ -23,8 +23,6 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <pgbulkinsert.version>1.1</pgbulkinsert.version>
-        <jtinycsvparser.version>1.2</jtinycsvparser.version>
     </properties>
 
     <dependencies>
@@ -32,26 +30,19 @@
         <dependency>
             <groupId>de.bytefish</groupId>
             <artifactId>jtinycsvparser</artifactId>
-            <version>${jtinycsvparser.version}</version>
+            <version>1.2</version>
         </dependency>
 
         <dependency>
             <groupId>de.bytefish</groupId>
             <artifactId>pgbulkinsert</artifactId>
-            <version>${pgbulkinsert.version}</version>
+            <version>3.3</version>
         </dependency>
 
         <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-dbcp2</artifactId>
-            <version>2.0.1</version>
-        </dependency>
-
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.12</version>
-            <scope>test</scope>
+            <groupId>io.reactivex.rxjava2</groupId>
+            <artifactId>rxjava</artifactId>
+            <version>2.2.8</version>
         </dependency>
 
     </dependencies>

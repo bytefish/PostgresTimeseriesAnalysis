@@ -3,7 +3,8 @@
 :: Copyright (c) Philipp Wagner. All rights reserved.
 :: Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-set PGSQL_EXECUTABLE="C:\Program Files\PostgreSQL\9.4\bin\psql.exe"
+set PGSQL_EXECUTABLE="psql.exe"
+set CREATEDB_EXECUTABLE="createdb.exe"
 set STDOUT=stdout.log
 set STDERR=stderr.log
 set LOGFILE=query_output.log
@@ -33,21 +34,9 @@ if /i [%reply_%] NEQ [y]  (
 set /p PGPASSWORD="Password: "
 
 1>%STDOUT% 2>%STDERR% (
-
-	:: Schemas
-	%PGSQL_EXECUTABLE% -h %HostName% -p %PortNumber% -d %DatabaseName% -U %UserName% < 01_Schemas/schema_sample.sql -L %LOGFILE%
-	
-	:: Tables
-	%PGSQL_EXECUTABLE% -h %HostName% -p %PortNumber% -d %DatabaseName% -U %UserName% < 02_Tables/tables_sample.sql -L %LOGFILE%
-	
-	:: Keys
-	%PGSQL_EXECUTABLE% -h %HostName% -p %PortNumber% -d %DatabaseName% -U %UserName% < 03_Keys/keys_sample.sql -L %LOGFILE%
-	
-	:: Security
-	%PGSQL_EXECUTABLE% -h %HostName% -p %PortNumber% -d %DatabaseName% -U %UserName% < 05_Security/security_sample.sql -L %LOGFILE%
-	
-	:: Data
-	%PGSQL_EXECUTABLE% -h %HostName% -p %PortNumber% -d %DatabaseName% -U %UserName% < 06_Data/data_sample_stations.sql -L %LOGFILE%
+    %CREATEDB_EXECUTABLE% -h %HostName% -p %PortNumber% -U %UserName% -O %UserName% %DatabaseName%
+	%PGSQL_EXECUTABLE% -h %HostName% -p %PortNumber% -d %DatabaseName% -U %UserName% < sql/10_create_database.sql -L %LOGFILE%
+    %PGSQL_EXECUTABLE% -h %HostName% -p %PortNumber% -d %DatabaseName% -U %UserName% < sql/20_sample_data.sql -L %LOGFILE%
 )
 
 goto :end

@@ -39,17 +39,8 @@ fi
 
 read -p "Password: " PGPASSWORD
 
-# Schemas
-psql -h $HostName -p $PortNumber -d $DatabaseName -U $UserName < 01_Schemas/schema_sample.sql -L $LOGFILE 1>$STDOUT 2>$STDERR
+# Database
+psql -h $HostName -p $PortNumber -d $DatabaseName -U $UserName < sql/10_create_database.sql -L $LOGFILE 1>$STDOUT 2>$STDERR
 
-# Tables
-psql -h $HostName -p $PortNumber -d $DatabaseName -U $UserName < 02_Tables/tables_sample.sql -L $LOGFILE 1>>$STDOUT 2>>$STDERR
-
-# Keys
-psql -h $HostName -p $PortNumber -d $DatabaseName -U $UserName < 03_Keys/keys_sample.sql -L $LOGFILE 1>>$STDOUT 2>>$STDERR
-
-# Security
-psql -h $HostName -p $PortNumber -d $DatabaseName -U $UserName < 05_Security/security_sample.sql -L $LOGFILE 1>>$STDOUT 2>>$STDERR
-
-# Data
-psql -h $HostName -p $PortNumber -d $DatabaseName -U $UserName < 06_Data/data_sample_stations.sql -L $LOGFILE 1>>$STDOUT 2>>$STDERR
+# Sample Data
+psql -h $HostName -p $PortNumber -d $DatabaseName -U $UserName < sql/20_sample_data.sql -L $LOGFILE 1>>$STDOUT 2>>$STDERR
