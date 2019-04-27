@@ -66,7 +66,7 @@ max_parallel_workers_per_gather = 4	# taken from max_worker_processes
 
 ### How to calculate the seconds between two Timestamps ###
 
-First we define a Function ``DateDiffSeconds`` to calculate the seconds between two timestamps. 
+First we define a Function ``datediff_seconds`` to calculate the seconds between two timestamps. 
 
 This can be done using PostgreSQL ``DATE_PART`` function:
 
@@ -130,7 +130,7 @@ Total query runtime: 40 secs.
 17043 rows retrieved.
 ``` 
 
-### Initial Work on Interpolation ###
+### Linear Interpolation ###
 
 First we define a function to get the first and last value of a result set:
 
@@ -162,6 +162,7 @@ CREATE AGGREGATE sample.LAST (
 );
 ``` 
 
+Then we define a method to turn a Timestamp 
 
 Next we define a function to do a Linear Interpolation between timesteps:
 

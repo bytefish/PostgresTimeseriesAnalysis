@@ -98,7 +98,19 @@ CREATE AGGREGATE sample.LAST (
         stype    = anyelement
 );
 
-CREATE OR REPLACE FUNCTION sample.timestamp_to_seconds(start_t TIMESTAMP, end_t TIMESTAMP) 
+CREATE OR REPLACE FUNCTION sample.timestamp_to_seconds(timestamp_t TIMESTAMP) 
+RETURNS INT AS $$
+DECLARE
+    seconds INT = 0;
+   BEGIN
+    seconds = select extract('epoch' from timestamp_t);
+    
+    RETURN diff;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
+COST 1000;
+
+CREATE OR REPLACE FUNCTION sample.datediff_seconds(start_t TIMESTAMP, end_t TIMESTAMP) 
 RETURNS INT AS $$
 DECLARE
     diff_interval INTERVAL; 
@@ -114,6 +126,18 @@ DECLARE
             DATE_PART('second', end_t - start_t);
             
     RETURN diff;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
+COST 1000;
+
+CREATE OR REPLACE FUNCTION sample.timestamp_to_seconds(timestamp_t TIMESTAMP) 
+RETURNS INT AS $$
+DECLARE
+    seconds INT = 0;
+   BEGIN
+    seconds = extract('epoch' from timestamp_t);
+    
+    RETURN seconds;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
 COST 1000;
