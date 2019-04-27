@@ -7,15 +7,12 @@ import csv.model.LocalWeatherData;
 import csv.model.Station;
 import csv.parser.Parsers;
 import de.bytefish.jtinycsvparser.mapping.CsvMappingResult;
-import de.bytefish.pgbulkinsert.pgsql.processor.BulkProcessor;
-import de.bytefish.pgbulkinsert.pgsql.processor.handler.BulkWriteHandler;
+import de.bytefish.pgbulkinsert.PgBulkInsert;
+import io.reactivex.Observable;
 import io.reactivex.disposables.Disposable;
 import org.postgresql.PGConnection;
-import org.postgresql.jdbc.PgConnection;
-import pgsql.connection.PooledConnectionFactory;
-import pgsql.mapping.LocalWeatherDataBulkInsert;
+import pgsql.mapping.LocalWeatherDataMapping;
 
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
@@ -25,16 +22,15 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import io.reactivex.Observable;
 
 public class WeatherDataStreamingExample {
 
-    private static final String databaseUri = "postgres://philipp:test_pwd@127.0.0.1:5432/sampledb";
+    private static final String databaseUri = "jdbc:postgresql://127.0.0.1:5432/sampledb?user=philipp&password=test_pwd";
 
     public static void main(String[] args) {
 
         // The PostgreSQL Bulk Writer:
-        final LocalWeatherDataBulkInsert writer = new LocalWeatherDataBulkInsert("sample", "weather_data");
+        final PgBulkInsert<pgsql.model.LocalWeatherData> writer = new PgBulkInsert<>(new LocalWeatherDataMapping("sample", "weather_data"));
 
         // Path to QCLCD CSV Files:
         final Path csvStationDataFilePath = FileSystems.getDefault().getPath("D:\\datasets\\201503station.txt");
@@ -44,6 +40,7 @@ public class WeatherDataStreamingExample {
         final Map<String, Station> stationMap = getStationMap(csvStationDataFilePath);
 
         try (Stream<CsvMappingResult<LocalWeatherData>> csvStream = getLocalWeatherData(csvLocalWeatherDataFilePath)) {
+            // Now turn the CSV Stream into the Postgres Stream:
             Stream<pgsql.model.LocalWeatherData> localWeatherDataStream = csvStream
                     // Filter only valid entries:
                     .filter(x -> x.isValid())
@@ -75,7 +72,7 @@ public class WeatherDataStreamingExample {
                             // And Bulk Write the Results:
                             writer.saveAll(pgConnection, x);
                         }
-                    });
+                    }, x -> System.err.println(x));
 
             // Probably not neccessary, but dispose anyway:
             if(disposable.isDisposed()) {
@@ -97,6 +94,9 @@ public class WeatherDataStreamingExample {
     private static Map<String, Station> getStationMap(Path path) {
         try (Stream<csv.model.Station> stationStream = getStations(path)) {
             return stationStream
+                    .collect(Collectors.groupingBy(x -> x.getWban()))
+                    .entrySet().stream()
+                    .map(x -> x.getValue().get(0))
                     .collect(Collectors.toMap(csv.model.Station::getWban, x -> x));
         }
     }
