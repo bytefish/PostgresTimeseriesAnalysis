@@ -71,7 +71,7 @@ First we define a Function ``datediff_seconds`` to calculate the seconds between
 This can be done using PostgreSQL ``DATE_PART`` function:
 
 ```sql
-CREATE OR REPLACE FUNCTION sample.DateDiffSeconds(start_t TIMESTAMP, end_t TIMESTAMP) 
+CREATE OR REPLACE FUNCTION sample.datediff_seconds(start_t TIMESTAMP, end_t TIMESTAMP) 
 RETURNS INT AS $$
 DECLARE
     diff_interval INTERVAL; 
@@ -86,10 +86,10 @@ DECLARE
             DATE_PART('minute', end_t - start_t)) * 60 +
             DATE_PART('second', end_t - start_t);
             
-     RETURN diff;
-   END;
-   $$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
-   COST 1000;
+    RETURN diff;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
+COST 1000;
 ```
 
 ### Find Missing Values (without Index) ###
@@ -103,14 +103,14 @@ FROM (SELECT
         weather_data.datetime as MeasurementDateTime,                 
         LAG(weather_data.datetime, 1, Null) OVER (PARTITION BY weather_data.wban ORDER BY weather_data.datetime) AS PreviousMeasurementDateTime
      FROM sample.weather_data) LagSelect
-WHERE sample.datediffseconds (PreviousMeasurementDateTime, MeasurementDateTime) > 3600;
+WHERE sample.datediff_seconds (PreviousMeasurementDateTime, MeasurementDateTime) > 3600;
 ```
 
 Execution Time:
 
 ```
-Total query runtime: 2 min.
-17043 rows retrieved.
+Successfully run. Total query runtime: 33 secs 728 msec.
+17043 rows affected.
 ```
 
 ### Find Missing Values (with Index) ###
@@ -126,35 +126,31 @@ Then execute the query to find missing values again:
 Execution Time:
 
 ```
-Total query runtime: 40 secs.
-17043 rows retrieved.
+Successfully run. Total query runtime: 21 secs 824 msec.
+17043 rows affected.
 ``` 
 
-### Linear Interpolation ###
+### Linear Interpolation with PostgreSQL ###
 
 First we define a function to get the first and last value of a result set:
 
 ```sql
--- Create a function that always returns the first non-NULL item
 CREATE OR REPLACE FUNCTION sample.first_agg ( anyelement, anyelement )
 RETURNS anyelement LANGUAGE SQL IMMUTABLE STRICT AS $$
         SELECT $1;
 $$;
  
--- And then wrap an aggregate around it
 CREATE AGGREGATE sample.FIRST (
         sfunc    = sample.first_agg,
         basetype = anyelement,
         stype    = anyelement
 );
  
--- Create a function that always returns the last non-NULL item
 CREATE OR REPLACE FUNCTION sample.last_agg ( anyelement, anyelement )
 RETURNS anyelement LANGUAGE SQL IMMUTABLE STRICT AS $$
         SELECT $2;
 $$;
  
--- And then wrap an aggregate around it
 CREATE AGGREGATE sample.LAST (
         sfunc    = sample.last_agg,
         basetype = anyelement,
@@ -162,9 +158,44 @@ CREATE AGGREGATE sample.LAST (
 );
 ``` 
 
-Then we define a method to turn a Timestamp 
+Then we define a method to turn a Timestamp into seconds since ``epoch``:
 
-Next we define a function to do a Linear Interpolation between timesteps:
+```sql
+CREATE OR REPLACE FUNCTION sample.timestamp_to_seconds(timestamp_t TIMESTAMP) 
+RETURNS INT AS $$
+DECLARE
+    seconds INT = 0;
+   BEGIN
+    seconds = select extract('epoch' from timestamp_t);
+    
+    RETURN diff;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
+COST 1000;
+```
+
+Next we define a general function to do a Linear Interpolation between two values:
+
+```sql
+CREATE OR REPLACE FUNCTION sample.linear_interpolate(x_i int, x_0 int, y_0 DOUBLE PRECISION, x_1 int, y_1 DOUBLE PRECISION) 
+RETURNS DOUBLE PRECISION AS $$
+DECLARE
+    x INT = 0; 
+    m DOUBLE PRECISION = 0;
+    n DOUBLE PRECISION = 0;
+   BEGIN
+
+    m = (y_1 - y_0) / (x_1 - x_0);
+    n = y_0;
+    x = (x_i - x_0);
+    
+    RETURN (m * x + n);
+   END;
+   $$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
+   COST 1000;
+```
+
+And now we can use ``sample.linear_interpolate`` and ``timestamp_to_seconds`` to interpolate between two timestamps:
 
 ```sql
 CREATE OR REPLACE FUNCTION sample.linear_interpolate(x_i timestamp, x_0 timestamp, y_0 double precision, x_1 timestamp, y_1 double precision)
@@ -180,72 +211,155 @@ RETURNS DOUBLE PRECISION AS $$
    $$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
    COST 1000;
 
-
-CREATE OR REPLACE FUNCTION sample.linear_interpolate(x_i int, x_0 int, y_0 DOUBLE PRECISION, x_1 int, y_1 DOUBLE PRECISION) 
-RETURNS DOUBLE PRECISION AS $$
-DECLARE
-    x INT = 0; 
-    m DOUBLE PRECISION = 0;
-    n DOUBLE PRECISION = 0;
-   BEGIN
-    -- Function to solve is: y = mx + n, so first solve m:
-    m = (y_1 - y_0) / (x_1 - x_0);
-    n = y_0;
-    x = (x_i - x_0);
-    
-    RETURN (m * x + n);
-   END;
-   $$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
-   COST 1000;
 ```
 
-The following query then builds a query, which interpolates the values in 5 Minute intervals for 1 Station.
+### Interpolate Temperatures in Intervals ###
+
+The following query then builds a query, which interpolates the values in intervals for a station:
 
 ```sql
-explain analyze with bounded as (
-    select
-      wban,
-    	datetime,
-    	'epoch'::timestamp + '5 Minute'::interval * (extract(epoch from datetime)::int4 / 300) as slice,
-    	temperature
-    from sample.weather_data
-    where wban = '53922'
-    order by datetime asc
-),
-dense as(
-	select '53922'::VARCHAR(255) as wban, slice
-	from generate_series('2015-03-01'::timestamp, '2015-03-20'::timestamp, '5 Minute'::Interval)  s(slice)
-),
-filled as(
-    select
-       wban,
-       slice,
-       temperature,
-       coalesce(temperature,
-                sample.linear_interpolate(slice,
-                                          sample.last(datetime) over (lookback),
-                                          sample.last(temperature) over (lookback),
-                                          sample.last(datetime) over (lookforward),
-                                          sample.last(temperature) over (lookforward))) interpolated
-    from bounded right join dense
-    using (wban, slice)
-    window
-        lookback as (order by slice, datetime),
-        lookforward as (order by slice desc, datetime desc)
-    order by slice, datetime
-)
-select
-  wban,
-	slice,
-    min(interpolated),
-    max(interpolated),
-    avg(interpolated)
-from filled
-group by slice, wban
-order by slice, wban;
+CREATE OR REPLACE FUNCTION sample.interpolate_temperature(station_p varchar(255), start_t timestamp, end_t timestamp, slice_t interval)
+RETURNS TABLE(r_wban varchar(255), r_slice timestamp, min_temp DOUBLE PRECISION, max_temp DOUBLE PRECISION, avg_temp DOUBLE PRECISION) AS $$
+   BEGIN
+   RETURN QUERY 
+   WITH bounded_series AS (
+            SELECT
+              wban,
+                datetime,
+                'epoch'::timestamp + '5 Minute'::interval * (extract(epoch from datetime)::int4 / 300) AS slice,
+                temperature
+            FROM sample.weather_data w
+            WHERE w.wban = station_p
+            ORDER BY datetime ASC
+        ),
+        dense_series AS (
+            SELECT station_p as wban, slice
+            FROM generate_series(start_t, end_t, slice_t)  s(slice)
+        ),
+        filled_series AS (
+            SELECT
+               wban,
+               slice,
+               temperature,
+               COALESCE(temperature, sample.linear_interpolate(slice,
+                                                  sample.last(datetime) over (lookback),
+                                                  sample.last(temperature) over (lookback),
+                                                  sample.last(datetime) over (lookforward),
+                                                  sample.last(temperature) over (lookforward))) interpolated
+            FROM bounded_series 
+                RIGHT JOIN dense_series
+            USING (wban, slice)
+            WINDOW
+                lookback AS (ORDER BY slice, datetime),
+                lookforward AS (ORDER BY slice DESC, datetime DESC)
+            ORDER BY slice, datetime
+        )
+        SELECT
+            wban AS r_wban,
+            slice AS r_slice,
+            MIN(interpolated) as min_temp,
+            MAX(interpolated) as max_temp,
+            AVG(interpolated) as avg_temp
+        FROM filled_series
+        GROUP BY slice, wban
+        ORDER BY wban, slice;
+    END;
+$$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
+COST 1000;
 ```
 
-This leads to the following Query Plan:
+#### Example Query ####
+
+We can then call the function like this to build 5 Minute slices for the results:
+
+```sql
+select * from sample.interpolate_temperature('53922', '2015-03-01', '2015-03-20', '5 Minute')
+```
+
+And get the interpolated temperatures back:
+
+```
+<table>
+    <thead>
+        <th>
+            <td>r_wban</td>
+        </th>
+        <th>
+            <td>r_slice</td>
+        </th>
+        <th>
+            <td>min_temp</td>
+        </th>
+        <th>
+            <td>max_temp</td>
+        </th>
+        <th>
+            <td>avg_temp</td>
+        </th>
+    </thead>
+    <tbody>
+        <tr>
+            <td>53922</td>	
+            <td>2015-03-01 00:50:00</td>	
+            <td>-1.10000002384186</td>	
+            <td>-1</td>	
+            <td>-1.05000001192093</td>
+        </tr>
+        <tr>
+            <td>53922</td>
+            <td>2015-03-01 00:55:00</td>
+            <td>-1.10000002384186</td>
+            <td>-1.10000002384186</td>
+            <td>-1.10000002384186</td>
+        </tr>
+        <tr>
+            <td>53922</td>	
+            <td>2015-03-01 01:00:00</td>	
+            <td>-1.10000002384186</td>	
+            <td>-1.10000002384186</td>	    
+            <td>-1.10000002384186</td>
+        </tr>
+        <tr>
+            <td>53922</td>	
+            <td>2015-03-01 01:05:00</td>	
+            <td>-1.10000002384186</td>	
+            <td>-1.10000002384186</td>	    
+            <td>-1.10000002384186</td>
+        </tr>
+        <tr>
+            <td>53922</td>
+            <td>2015-03-01 01:10:00</td>
+            <td>-1.10000002384186</td>
+            <td>-1.10000002384186</td>
+            <td>-1.10000002384186</td>
+        </tr>
+        <tr>
+            <td>53922</td>	
+            <td>2015-03-01 01:15:00</td>	
+            <td>-1.08717951102135</td>	
+            <td>-1.08717951102135</td>	    
+            <td>-1.08717951102135</td>
+        </tr>
+        <tr>
+            <td>53922</td>	
+            <td>2015-03-01 01:20:00</td>
+            <td>-1.02307694691878</td>	
+            <td>-1.02307694691878</td>
+            <td>-1.02307694691878</td></tr>
+        <tr>
+            <td>53922</td>
+            <td>2015-03-01 01:25:00</td>
+            <td>-0.958974382816217</td>
+            <td>-0.958974382816217</td>
+            <td>-0.958974382816217</td>
+        </tr>
+    </tbody>
+</table>
+```
+
+#### Query Plan #### 
+
+The query leads to the following Query Plan (I will probably investigate if it can be optimized):
 
 ```
 Sort  (cost=93788.91..93789.41 rows=200 width=548) (actual time=1214.739..1215.225 rows=5473 loops=1)

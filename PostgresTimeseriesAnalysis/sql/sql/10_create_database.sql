@@ -142,19 +142,6 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
 COST 1000;
 
-CREATE OR REPLACE FUNCTION sample.linear_interpolate(x_i timestamp, x_0 timestamp, y_0 double precision, x_1 timestamp, y_1 double precision)
-RETURNS DOUBLE PRECISION AS $$
-   BEGIN
-   	return sample.linear_interpolate(
-        sample.timestamp_to_seconds(x_i),
-        sample.timestamp_to_seconds(x_0),
-        y_0,
-        sample.timestamp_to_seconds(x_1),
-        y_1);
-   END;
-   $$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
-   COST 1000;
-
 CREATE OR REPLACE FUNCTION sample.linear_interpolate(x_i int, x_0 int, y_0 DOUBLE PRECISION, x_1 int, y_1 DOUBLE PRECISION) 
 RETURNS DOUBLE PRECISION AS $$
 DECLARE
@@ -168,6 +155,68 @@ DECLARE
     x = (x_i - x_0);
     
     RETURN (m * x + n);
+END;
+$$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
+COST 1000;
+
+CREATE OR REPLACE FUNCTION sample.linear_interpolate(x_i timestamp, x_0 timestamp, y_0 double precision, x_1 timestamp, y_1 double precision)
+RETURNS DOUBLE PRECISION AS $$
+   BEGIN
+   	return sample.linear_interpolate(
+        sample.timestamp_to_seconds(x_i),
+        sample.timestamp_to_seconds(x_0),
+        y_0,
+        sample.timestamp_to_seconds(x_1),
+        y_1);
    END;
    $$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
    COST 1000;
+
+CREATE OR REPLACE FUNCTION sample.interpolate_temperature(station_p varchar(255), start_t timestamp, end_t timestamp, slice_t interval)
+RETURNS TABLE(r_wban varchar(255), r_slice timestamp, min_temp DOUBLE PRECISION, max_temp DOUBLE PRECISION, avg_temp DOUBLE PRECISION) AS $$
+   BEGIN
+   RETURN QUERY 
+   WITH bounded_series AS (
+            SELECT
+              wban,
+                datetime,
+                'epoch'::timestamp + '5 Minute'::interval * (extract(epoch from datetime)::int4 / 300) AS slice,
+                temperature
+            FROM sample.weather_data w
+            WHERE w.wban = station_p
+            ORDER BY datetime ASC
+        ),
+        dense_series AS (
+            SELECT station_p as wban, slice
+            FROM generate_series(start_t, end_t, slice_t)  s(slice)
+        ),
+        filled_series AS (
+            SELECT
+               wban,
+               slice,
+               temperature,
+               COALESCE(temperature, sample.linear_interpolate(slice,
+                                                  sample.last(datetime) over (lookback),
+                                                  sample.last(temperature) over (lookback),
+                                                  sample.last(datetime) over (lookforward),
+                                                  sample.last(temperature) over (lookforward))) interpolated
+            FROM bounded_series 
+                RIGHT JOIN dense_series
+            USING (wban, slice)
+            WINDOW
+                lookback AS (ORDER BY slice, datetime),
+                lookforward AS (ORDER BY slice DESC, datetime DESC)
+            ORDER BY slice, datetime
+        )
+        SELECT
+            wban AS r_wban,
+            slice AS r_slice,
+            MIN(interpolated) as min_temp,
+            MAX(interpolated) as max_temp,
+            AVG(interpolated) as avg_temp
+        FROM filled_series
+        GROUP BY slice, wban
+        ORDER BY wban, slice;
+    END;
+$$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
+COST 1000;
