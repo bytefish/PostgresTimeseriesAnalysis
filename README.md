@@ -215,7 +215,7 @@ RETURNS DOUBLE PRECISION AS $$
 
 ### Interpolate Temperatures in Intervals ###
 
-The following query then builds a query, which interpolates the values in intervals for a station:
+The following function interpolates the temperature for a given intervals:
 
 ```sql
 CREATE OR REPLACE FUNCTION sample.interpolate_temperature(station_p varchar(255), start_t timestamp, end_t timestamp, slice_t interval)
