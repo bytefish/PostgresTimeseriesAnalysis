@@ -280,21 +280,13 @@ And get the interpolated temperatures back:
 
 <table>
     <thead>
-        <th>
-            <td>r_wban</td>
-        </th>
-        <th>
-            <td>r_slice</td>
-        </th>
-        <th>
-            <td>min_temp</td>
-        </th>
-        <th>
-            <td>max_temp</td>
-        </th>
-        <th>
-            <td>avg_temp</td>
-        </th>
+        <tr>
+            <th>r_wban</th>
+            <th>r_slice</th>
+            <th>min_temp</th>
+            <th>max_temp</th>
+            <th>avg_temp</th>
+        </tr>
     </thead>
     <tbody>
         <tr>
