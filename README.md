@@ -278,7 +278,6 @@ select * from sample.interpolate_temperature('53922', '2015-03-01', '2015-03-20'
 
 And get the interpolated temperatures back:
 
-```
 <table>
     <thead>
         <th>
@@ -355,7 +354,6 @@ And get the interpolated temperatures back:
         </tr>
     </tbody>
 </table>
-```
 
 #### Query Plan #### 
 
