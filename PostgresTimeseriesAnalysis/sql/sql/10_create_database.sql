@@ -171,8 +171,8 @@ RETURNS DOUBLE PRECISION AS $$
       sample.timestamp_to_seconds(x_1),
       y_1);
 END;
-   $$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
-   COST 1000;
+$$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
+COST 1000;
 
 
 CREATE OR REPLACE FUNCTION sample.interpolate_temperature(wban_p TEXT, start_t TIMESTAMP, end_t TIMESTAMP, slice_t INTERVAL)
@@ -183,14 +183,18 @@ RETURNS TABLE(
   max_temp DOUBLE PRECISION,
   avg_temp DOUBLE PRECISION
 ) AS $$
+  DECLARE
+    slice_seconds INT = 0;
   BEGIN
 
+    slice_seconds = EXTRACT(epoch FROM slice_t)::int4;
+    
     RETURN QUERY
     -- bounded_series assigns all values into a time slice with a given interval length in slice_t:
     WITH bounded_series AS (
       SELECT wban,
              datetime,
-             'epoch'::timestamp + slice_t * (extract(epoch from datetime)::int4 / 300) AS slice,
+             'epoch'::timestamp + slice_t * (extract(epoch from datetime)::int4 / slice_seconds) AS slice,
              temperature
       FROM sample.weather_data w
       WHERE w.wban = wban_p
