@@ -4,18 +4,18 @@ There was an interesting article by the [jOOQ] team on how to fill gaps in data 
 
 * [Using IGNORE NULLS With SQL Window Functions to Fill Gaps]
 
-I have been experimenting with using SQL for Linear Interpolation two years ago, and the whole code 
-is heavily based on a great article by [Caleb Welton](https://github.com/cwelton):
+I have been experimenting with using SQL for Linear Interpolation two years ago. It would be a waste 
+to silo all this in a private repository, so I decided to share it. 
+
+The code is heavily based on a great article by [Caleb Welton](https://github.com/cwelton):
 
 * [Time Series Analysis Part 3: Resampling and Interpolation]
-
-It would be a waste to silo all this in a private repository, so I will share it. 
-
-To reproduce the example, please see the section [How to Reproduce this Experiment](#how-to-reproduce-this-experiment).
 
 This article can also be found on my personal website:
 
 * [https://bytefish.de/blog/postgresql_interpolation/](https://bytefish.de/blog/postgresql_interpolation/)
+
+To reproduce the example, please see the section [How to Reproduce this Experiment](#how-to-reproduce-this-experiment).
 
 ## Dataset ##
 
