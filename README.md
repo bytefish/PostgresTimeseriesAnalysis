@@ -13,6 +13,10 @@ It would be a waste to silo all this in a private repository, so I will share it
 
 To reproduce the example, please see the section [How to Reproduce this Experiment](#how-to-reproduce-this-experiment).
 
+This article can also be found on my personal website:
+
+* [https://bytefish.de/blog/postgresql_interpolation/](https://bytefish.de/blog/postgresql_interpolation/)
+
 ## Dataset ##
 
 The dataset is the [Quality Controlled Local Climatological Data (QCLCD)] for 2014 and 2015. It contains hourly weather 
