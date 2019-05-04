@@ -159,13 +159,13 @@ As a final example I want to show how to use the functions to interpolate the sa
 The idea is quite simple: First of all we will put all measurements into a time slice of a given interval length. So we know, that we have 
 a value for the expected point in time. We will then build a dense series using the [generate_series] method with the given ``slice_t`` interval, which has all the slices we expect.
 
-The ``bounded_series`` and ``dense_series`` will then be joined, which means: The joined series will have ``NULL`` for the measurements, which indicates the slice has to be interpolated. A window function will be used to identify the first and last non-null value of a value, so we get the two points for the ``linear_interpolate``function.
+The ``bounded_series`` and ``dense_series`` will then be joined, which means: The joined series will have ``NULL`` for the measurements, which indicates the slice has to be interpolated. A custom function will be used to identify the first and last non-null value of a window, so we get the two points for the ``linear_interpolate`` function.
 
-To make this work we need to ignore NULL values, just like in the [jOOQ] article. The PostgreSQL Wiki has a great article on it, which shows how to implement such a function with a PostgreSQL AGGREGATE:
+To make this work we need to ignore ``NULL`` values, just like in the [jOOQ] article. The PostgreSQL wiki has a great article on it, which shows how to implement such a function with a PostgreSQL ``AGGREGATE``:
 
 * [https://wiki.postgresql.org/wiki/First/last_(aggregate)](https://wiki.postgresql.org/wiki/First/last_(aggregate))
 
-I simple copy and pasted it and appended the Schema:
+I simply copy and paste it:
 
 ```sql
 CREATE OR REPLACE FUNCTION sample.last_agg ( anyelement, anyelement )
