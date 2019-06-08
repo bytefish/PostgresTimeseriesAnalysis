@@ -98,112 +98,52 @@ CREATE AGGREGATE sample.LAST (
         stype    = anyelement
 );
 
-
 CREATE OR REPLACE FUNCTION sample.timestamp_to_seconds(timestamp_t TIMESTAMP)
-RETURNS INT AS $$
-  DECLARE
-    seconds INT = 0;
-  BEGIN
-    seconds = (select extract('epoch' from timestamp_t));
-
-    RETURN diff;
-  END;
-$$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
-COST 1000;
-
--- Calculates the Seconds between two timestamps:
-CREATE OR REPLACE FUNCTION sample.datediff_seconds(start_t TIMESTAMP, end_t TIMESTAMP)
-RETURNS INT AS $$
-  DECLARE
-    diff_interval INTERVAL;
-    diff INT = 0;
-  BEGIN
-    -- Difference between End and Start Timestamp:
-    diff_interval = end_t - start_t;
-
-    -- Calculate the Difference in Seconds:
-    diff = ((DATE_PART('day', end_t - start_t) * 24 +
-            DATE_PART('hour', end_t - start_t)) * 60 +
-            DATE_PART('minute', end_t - start_t)) * 60 +
-            DATE_PART('second', end_t - start_t);
-
-     RETURN diff;
-  END;
-$$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
-COST 1000;
-
-CREATE OR REPLACE FUNCTION sample.timestamp_to_seconds(timestamp_t TIMESTAMP)
-RETURNS INT AS $$
-  DECLARE
-    seconds INT = 0;
-  BEGIN
-    seconds = extract('epoch' from timestamp_t);
-
-    RETURN seconds;
-  END;
-$$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
-COST 1000;
-
-CREATE OR REPLACE FUNCTION sample.linear_interpolate(x_i INTEGER, x_0 INTEGER, y_0 DOUBLE PRECISION, x_1 int, y_1 DOUBLE PRECISION)
 RETURNS DOUBLE PRECISION AS $$
-  DECLARE
-    x INT = 0;
-    m DOUBLE PRECISION = 0;
-    n DOUBLE PRECISION = 0;
-  BEGIN
+    SELECT EXTRACT(epoch from timestamp_t)
+$$ LANGUAGE SQL;
 
-    m = (y_1 - y_0) / (x_1 - x_0);
-    n = y_0;
-    x = (x_i - x_0);
-
-    RETURN (m * x + n);
-  END;
-$$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
-COST 1000;
+CREATE OR REPLACE FUNCTION sample.linear_interpolate(x_i DOUBLE PRECISION, 
+    x_0 DOUBLE PRECISION, 
+    y_0 DOUBLE PRECISION, 
+    x_1 DOUBLE PRECISION, 
+    y_1 DOUBLE PRECISION)
+RETURNS DOUBLE PRECISION AS $$
+    SELECT (($5 - $3) / ($4 - $2)) * ($1 - $2) + $3;
+$$ LANGUAGE SQL;
 
 CREATE OR REPLACE FUNCTION sample.linear_interpolate(x_i TIMESTAMP, x_0 TIMESTAMP, y_0 DOUBLE PRECISION, x_1 TIMESTAMP, y_1 DOUBLE PRECISION)
 RETURNS DOUBLE PRECISION AS $$
-  BEGIN
-   	RETURN sample.linear_interpolate(
-   	  sample.timestamp_to_seconds(x_i),
-      sample.timestamp_to_seconds(x_0),
-      y_0,
-      sample.timestamp_to_seconds(x_1),
-      y_1);
-END;
-$$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
-COST 1000;
+    SELECT sample.linear_interpolate(sample.timestamp_to_seconds($1), 
+        sample.timestamp_to_seconds($2), 
+        $3, 
+        sample.timestamp_to_seconds($4),
+        $5);
+$$ LANGUAGE SQL;
 
 
 CREATE OR REPLACE FUNCTION sample.interpolate_temperature(wban_p TEXT, start_t TIMESTAMP, end_t TIMESTAMP, slice_t INTERVAL)
 RETURNS TABLE(
-  r_wban TEXT,
-  r_slice TIMESTAMP,
-  min_temp DOUBLE PRECISION,
-  max_temp DOUBLE PRECISION,
-  avg_temp DOUBLE PRECISION
+    r_wban TEXT,
+    r_slice TIMESTAMP,
+    min_temp DOUBLE PRECISION,
+    max_temp DOUBLE PRECISION,
+    avg_temp DOUBLE PRECISION
 ) AS $$
-  DECLARE
-    slice_seconds INT = 0;
-  BEGIN
-
-    slice_seconds = EXTRACT(epoch FROM slice_t)::int4;
-    
-    RETURN QUERY
     -- bounded_series assigns all values into a time slice with a given interval length in slice_t:
     WITH bounded_series AS (
       SELECT wban,
              datetime,
-             'epoch'::timestamp + slice_t * (extract(epoch from datetime)::int4 / slice_seconds) AS slice,
+             'epoch'::timestamp + $4 * (extract(epoch from datetime)::int4 / EXTRACT(epoch FROM $4)::int4) AS slice,
              temperature
       FROM sample.weather_data w
-      WHERE w.wban = wban_p
+      WHERE w.wban = $1
       ORDER BY wban, slice, datetime ASC
     ),
     -- dense_series uses generate_series to generate the intervals we expect in the data:
     dense_series AS (
-      SELECT wban_p as wban, slice
-      FROM generate_series(start_t, end_t, slice_t)  s(slice)
+      SELECT $1 as wban, slice
+      FROM generate_series($2, $3, $4)  s(slice)
       ORDER BY wban, slice
     ),
     -- filled_series now uses a WINDOW function for find the first / last not null
@@ -236,6 +176,5 @@ RETURNS TABLE(
     FROM filled_series
     GROUP BY slice, wban
     ORDER BY wban, slice;
-  END;
-$$ LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
-COST 1000;
+    
+$$ LANGUAGE SQL;
