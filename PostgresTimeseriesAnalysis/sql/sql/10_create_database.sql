@@ -98,6 +98,11 @@ CREATE AGGREGATE sample.LAST (
         stype    = anyelement
 );
 
+CREATE OR REPLACE FUNCTION sample.datediff_seconds(start_t TIMESTAMP, end_t TIMESTAMP)
+RETURNS INT AS $$
+    SELECT EXTRACT(epoch FROM $2 - $1) 
+$$ LANGUAGE SQL;
+
 CREATE OR REPLACE FUNCTION sample.timestamp_to_seconds(timestamp_t TIMESTAMP)
 RETURNS DOUBLE PRECISION AS $$
     SELECT EXTRACT(epoch from timestamp_t)
