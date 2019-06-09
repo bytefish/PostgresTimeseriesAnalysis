@@ -54,7 +54,7 @@ define a function ``datediff_seconds`` to calculate the length between two times
 
 ```sql
 CREATE OR REPLACE FUNCTION sample.datediff_seconds(start_t TIMESTAMP, end_t TIMESTAMP)
-RETURNS INT AS $$
+RETURNS DOUBLE PRECISION AS $$
     SELECT EXTRACT(epoch FROM $2 - $1) 
 $$ LANGUAGE SQL;
 ```
