@@ -83,11 +83,6 @@ Successfully run. Total query runtime: 33 secs 590 msec.
 First of all we write a function to do a [Linear Interpolation] between two points:
 
 ```sql
-CREATE OR REPLACE FUNCTION sample.timestamp_to_seconds(timestamp_t TIMESTAMP)
-RETURNS DOUBLE PRECISION AS $$
-    SELECT EXTRACT(epoch from timestamp_t)
-$$ LANGUAGE SQL;
-
 CREATE OR REPLACE FUNCTION sample.linear_interpolate(x_i DOUBLE PRECISION, 
     x_0 DOUBLE PRECISION, 
     y_0 DOUBLE PRECISION, 
@@ -102,13 +97,9 @@ We are working with the ``TIMESTAMP`` datatype, so in order to put it into the `
 we need to transform the ``TIMESTAMP`` into its representation of seconds since epoch:
 
 ```sql
-CREATE OR REPLACE FUNCTION sample.linear_interpolate(x_i TIMESTAMP, x_0 TIMESTAMP, y_0 DOUBLE PRECISION, x_1 TIMESTAMP, y_1 DOUBLE PRECISION)
+CREATE OR REPLACE FUNCTION sample.timestamp_to_seconds(timestamp_t TIMESTAMP)
 RETURNS DOUBLE PRECISION AS $$
-    SELECT sample.linear_interpolate(sample.timestamp_to_seconds($1), 
-        sample.timestamp_to_seconds($2), 
-        $3, 
-        sample.timestamp_to_seconds($4),
-        $5);
+    SELECT EXTRACT(epoch from timestamp_t)
 $$ LANGUAGE SQL;
 ```
 
